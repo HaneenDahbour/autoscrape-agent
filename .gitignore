@@ -7,3 +7,5 @@ __pycache__/
 data/autoscrape.db
 data/exports/*.csv
 data/exports/*.json
+
+data/exports/*.db
