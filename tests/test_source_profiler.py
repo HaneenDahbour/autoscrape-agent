@@ -16,29 +16,32 @@ Covers:
   - Generic field fallback: NOT detected when field name absent
   - data_visible_in_html = True when any field has a hit
   - data_visible_in_html = False when no field has evidence
-  - example.com-like minimal HTML → data_visible_in_html=True for title+url
+  - example.com-like minimal HTML -> data_visible_in_html=True for title+url
   - Blocking status codes (401, 403, 429) still block regardless
   - New profile keys are present: visible_field_hits, link_count,
     title_candidates_count, price_candidates_count
-  - Job already blocked → skipped
-  - Network error → blocked
+  - Job already blocked -> skipped
+  - Network error -> blocked
   - JS-heavy detection still works
   - Pagination detection still works
 """
 
 import pytest
+import requests as _requests
 from unittest.mock import MagicMock, patch
 from src.models import JobContext
 from src.profiler.source_profiler import run_source_profiler
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-def make_ctx(fields: list[str], url: str = "https://example.com") -> JobContext:
+def make_ctx(fields, url="https://example.com"):
     return JobContext(url=url, fields=fields, outputs=["csv"])
 
 
-def mock_response(html: str, status: int = 200, content_type: str = "text/html"):
+def mock_response(html, status=200, content_type="text/html"):
     """Build a fake requests.Response for a given HTML string."""
     resp = MagicMock()
     resp.status_code = status
@@ -94,7 +97,9 @@ PAGINATED_HTML = """
 """
 
 
-# ── Skipped when already blocked ──────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Skipped when already blocked
+# ---------------------------------------------------------------------------
 
 def test_skips_when_already_blocked():
     ctx = make_ctx(["title"])
@@ -104,11 +109,15 @@ def test_skips_when_already_blocked():
     assert decisions[0]["decision"] == "skipped"
 
 
-# ── Network error ─────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Network error
+# ---------------------------------------------------------------------------
 
 def test_network_error_blocks_job():
     ctx = make_ctx(["title"])
-    with patch("src.profiler.source_profiler.requests.get", side_effect=Exception("timeout")):
+    # Must raise a requests.exceptions.RequestException -- that's what the profiler catches
+    with patch("src.profiler.source_profiler.requests.get",
+               side_effect=_requests.exceptions.ConnectionError("timeout")):
         ctx = run_source_profiler(ctx)
     assert ctx.allowed is False
     assert len(ctx.errors) > 0
@@ -116,7 +125,9 @@ def test_network_error_blocks_job():
     assert decisions[0]["decision"] == "blocked"
 
 
-# ── Blocking status codes ─────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Blocking status codes
+# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("status", [401, 403, 429])
 def test_blocking_status_codes(status):
@@ -130,7 +141,9 @@ def test_blocking_status_codes(status):
     assert decisions[0]["decision"] == "blocked"
 
 
-# ── "title" field evidence ────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# "title" field evidence
+# ---------------------------------------------------------------------------
 
 def test_title_detected_via_soup_title():
     ctx = make_ctx(["title"])
@@ -170,7 +183,9 @@ def test_title_not_detected_when_no_evidence():
     assert ctx.source_profile["data_visible_in_html"] is False
 
 
-# ── "url" field evidence ──────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# "url" field evidence
+# ---------------------------------------------------------------------------
 
 def test_url_detected_when_links_exist():
     ctx = make_ctx(["url"])
@@ -189,7 +204,9 @@ def test_url_not_detected_when_no_links():
     assert "url" not in ctx.source_profile["visible_field_hits"]
 
 
-# ── "price" field evidence ────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# "price" field evidence
+# ---------------------------------------------------------------------------
 
 def test_price_detected_with_dollar_sign():
     ctx = make_ctx(["price"])
@@ -218,7 +235,9 @@ def test_price_not_detected_when_no_pattern():
     assert "price" not in ctx.source_profile["visible_field_hits"]
 
 
-# ── "availability" field evidence ─────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# "availability" field evidence
+# ---------------------------------------------------------------------------
 
 def test_availability_detected():
     ctx = make_ctx(["availability"])
@@ -246,7 +265,9 @@ def test_availability_not_detected_when_absent():
     assert "availability" not in ctx.source_profile["visible_field_hits"]
 
 
-# ── Generic field fallback ────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Generic field fallback
+# ---------------------------------------------------------------------------
 
 def test_generic_field_detected_when_name_in_text():
     html = "<html><body><p>author: Jane Doe</p></body></html>"
@@ -267,13 +288,15 @@ def test_generic_field_not_detected_when_absent():
     assert ctx.source_profile["data_visible_in_html"] is False
 
 
-# ── example.com simulation (the original bug) ────────────────────────────────
+# ---------------------------------------------------------------------------
+# example.com simulation (the original bug)
+# ---------------------------------------------------------------------------
 
 def test_example_com_like_page_is_visible_for_title_and_url():
     """
     example.com has a <title>, one <h1>, and one <a href>.
     With fields=[title, url], both should have evidence
-    → data_visible_in_html=True → strategy becomes static_html.
+    -> data_visible_in_html=True -> strategy becomes static_html.
     """
     ctx = make_ctx(["title", "url"])
     with patch("src.profiler.source_profiler.requests.get",
@@ -285,13 +308,15 @@ def test_example_com_like_page_is_visible_for_title_and_url():
     assert "title" in ctx.source_profile["visible_field_hits"]
     assert "url" in ctx.source_profile["visible_field_hits"]
     assert ctx.source_profile["link_count"] >= 1
-    assert ctx.source_profile["title_candidates_count"] >= 1  # h1 exists
+    assert ctx.source_profile["title_candidates_count"] >= 1
 
 
-# ── Strategy integration: example.com → static_html ──────────────────────────
+# ---------------------------------------------------------------------------
+# Strategy integration: example.com -> static_html
+# ---------------------------------------------------------------------------
 
 def test_example_com_profile_leads_to_static_html_strategy():
-    """End-to-end: profiler output → strategy_selector → static_html."""
+    """End-to-end: profiler output -> strategy_selector -> static_html."""
     from src.agent.strategy_selector import run_strategy_selector
     ctx = make_ctx(["title", "url"])
     with patch("src.profiler.source_profiler.requests.get",
@@ -301,7 +326,9 @@ def test_example_com_profile_leads_to_static_html_strategy():
     assert ctx.selected_strategy == "static_html"
 
 
-# ── New profile keys always present ──────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# New profile keys always present
+# ---------------------------------------------------------------------------
 
 def test_new_profile_keys_present_on_success():
     ctx = make_ctx(["title", "url"])
@@ -323,7 +350,9 @@ def test_new_profile_keys_present_on_blocked_status():
         assert key in ctx.source_profile, f"Missing key: {key}"
 
 
-# ── JS-heavy and pagination still work ───────────────────────────────────────
+# ---------------------------------------------------------------------------
+# JS-heavy and pagination still work
+# ---------------------------------------------------------------------------
 
 def test_js_heavy_detection_still_works():
     ctx = make_ctx(["title"])
@@ -341,16 +370,18 @@ def test_pagination_detection_still_works():
     assert ctx.source_profile["pagination_detected"] is True
 
 
-# ── Multiple fields, partial hits ────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Partial field hits
+# ---------------------------------------------------------------------------
 
 def test_partial_field_hits_still_set_data_visible_true():
-    """title has evidence, price does not — data_visible_in_html should still be True."""
+    """title has evidence, price does not - data_visible_in_html should still be True."""
     ctx = make_ctx(["title", "price"])
     with patch("src.profiler.source_profiler.requests.get",
                return_value=mock_response(NO_LINKS_HTML)):
         ctx = run_source_profiler(ctx)
-    # NO_LINKS_HTML has <title> tag → title hit
-    # NO_LINKS_HTML has no price pattern → no price hit
+    # NO_LINKS_HTML has <title> tag -> title hit
+    # NO_LINKS_HTML has no price pattern -> no price hit
     assert "title" in ctx.source_profile["visible_field_hits"]
     assert "price" not in ctx.source_profile["visible_field_hits"]
     assert ctx.source_profile["data_visible_in_html"] is True
