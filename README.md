@@ -144,7 +144,7 @@ Supported XML shapes:
 * repeated `<entry>` nodes,
 * fallback repeated child nodes under the root when they look like records.
 
-This fits the existing strategy selector and extractor registry directly: when the source profiler marks a response as XML, the strategy selector chooses `api_xml`, and the extractor registry now maps `api_xml` to the XML extractor. JSON and static HTML behavior are unchanged.
+This fits the existing strategy selector and extractor registry directly: when the source profiler marks a response as XML, the strategy selector chooses `api_xml`, and the extractor registry now maps `api_xml` to the XML extractor. Explainable routing also detects XML sources as `api_like_xml` from URL extensions, metadata, or XML-like content. JSON and static HTML behavior are unchanged.
 
 The XML extractor keeps requested simple child tags when present, stamps each item with `source = "api_xml"`, and lets the existing cleaner handle relative URLs. Invalid XML, blocked status codes, and network failures are handled safely with warnings/decisions instead of crashing the pipeline.
 

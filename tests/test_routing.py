@@ -33,6 +33,16 @@ BLOCKED_HTML = """
 </body></html>
 """
 
+XML_CONTENT = """
+<?xml version="1.0" encoding="UTF-8"?>
+<items>
+  <item>
+    <title>Product A</title>
+    <url>/products/a</url>
+  </item>
+</items>
+"""
+
 
 def test_json_url_routes_to_api_like_json():
     route = decide_scrape_route("https://example.com/data.json")
@@ -49,6 +59,40 @@ def test_json_content_routes_to_api_like_json():
 
     assert route.route == "api_like_json"
     assert "Detected JSON-like content" in route.reasons
+
+
+def test_xml_url_routes_to_api_like_xml():
+    route = decide_scrape_route("https://example.com/products.xml")
+
+    assert route.route == "api_like_xml"
+    assert route.confidence == "green"
+    assert "URL path ends with .xml/.rss/.atom" in route.reasons
+
+
+def test_xml_metadata_routes_to_api_like_xml():
+    route = decide_scrape_route(
+        "https://example.com/feed",
+        metadata={"is_xml": True},
+    )
+
+    assert route.route == "api_like_xml"
+    assert route.confidence == "green"
+    assert "Source profiler detected XML content" in route.reasons
+
+
+def test_xml_like_content_routes_to_api_like_xml():
+    route = decide_scrape_route("https://example.com/feed", html=XML_CONTENT)
+
+    assert route.route == "api_like_xml"
+    assert route.confidence == "green"
+    assert "Detected XML-like content" in route.reasons
+
+
+def test_xml_route_has_at_least_one_reason():
+    route = decide_scrape_route("https://example.com/feed.atom")
+
+    assert route.route == "api_like_xml"
+    assert route.reasons
 
 
 def test_normal_html_routes_to_static_html():
@@ -79,6 +123,9 @@ def test_blocked_captcha_html_routes_to_fallback_manual_review():
     [
         ("https://example.com/data.json", None, None),
         ("https://example.com/api", '{"ok": true}', None),
+        ("https://example.com/products.xml", None, None),
+        ("https://example.com/feed", XML_CONTENT, None),
+        ("https://example.com/profiled.xml", None, {"is_xml": True}),
         ("https://example.com/products", NORMAL_HTML, None),
         ("https://example.com/app", SCRIPT_HEAVY_HTML, None),
         ("https://example.com/blocked", BLOCKED_HTML, None),

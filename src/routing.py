@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+from urllib.parse import urlparse
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
@@ -22,6 +23,7 @@ RouteName = Literal[
     "static_html",
     "browser_render",
     "api_like_json",
+    "api_like_xml",
     "fallback_manual_review",
 ]
 
@@ -40,6 +42,9 @@ BLOCKED_PATTERNS = (
     "unusual traffic",
     "too many requests",
 )
+
+XML_URL_EXTENSIONS = (".xml", ".rss", ".atom")
+XML_START_PATTERNS = ("<?xml", "<rss", "<feed", "<items", "<products", "<entries")
 
 
 @dataclass
@@ -66,6 +71,25 @@ def _looks_like_json(content: str) -> bool:
     return True
 
 
+def _looks_like_xml(content: str) -> bool:
+    stripped = content.strip()
+    lowered = stripped.lower()
+    if not stripped or not stripped.startswith("<"):
+        return False
+
+    if lowered.startswith(XML_START_PATTERNS):
+        return True
+
+    if re.search(r"<(item|product|entry)\b[^>]*>.*</\1>", stripped, re.IGNORECASE | re.DOTALL):
+        return True
+
+    return False
+
+
+def _url_path_ends_with(url: str, extensions: tuple[str, ...]) -> bool:
+    return urlparse(url).path.lower().endswith(extensions)
+
+
 def _html_signals(html: str | None) -> dict[str, Any]:
     if html is None:
         return {
@@ -76,6 +100,7 @@ def _html_signals(html: str | None) -> dict[str, Any]:
             "target_like_structure_count": 0,
             "blocked_pattern": None,
             "json_like_content": False,
+            "xml_like_content": False,
         }
 
     lowered = html.lower()
@@ -93,6 +118,19 @@ def _html_signals(html: str | None) -> dict[str, Any]:
             "target_like_structure_count": 0,
             "blocked_pattern": blocked_pattern,
             "json_like_content": True,
+            "xml_like_content": False,
+        }
+
+    if _looks_like_xml(html):
+        return {
+            "html_provided": True,
+            "html_length": len(html),
+            "script_count": 0,
+            "visible_text_length": 0,
+            "target_like_structure_count": 0,
+            "blocked_pattern": blocked_pattern,
+            "json_like_content": False,
+            "xml_like_content": True,
         }
 
     soup = BeautifulSoup(html, "lxml")
@@ -114,6 +152,7 @@ def _html_signals(html: str | None) -> dict[str, Any]:
         "target_like_structure_count": structure_count,
         "blocked_pattern": blocked_pattern,
         "json_like_content": False,
+        "xml_like_content": False,
     }
 
 
@@ -123,6 +162,7 @@ def _metadata_signals(metadata: dict | None) -> dict[str, Any]:
         "status_code": metadata.get("status_code"),
         "content_type": metadata.get("content_type", ""),
         "is_json": bool(metadata.get("is_json")),
+        "is_xml": bool(metadata.get("is_xml")),
         "is_html": bool(metadata.get("is_html")),
         "js_heavy": bool(metadata.get("js_heavy")),
         "data_visible_in_html": bool(metadata.get("data_visible_in_html")),
@@ -171,13 +211,13 @@ def decide_scrape_route(
 
     content_type = str(meta_info["content_type"]).lower()
     if (
-        url.lower().split("?", 1)[0].endswith(".json")
+        _url_path_ends_with(url, (".json",))
         or "json" in content_type
         or meta_info["is_json"]
         or html_info["json_like_content"]
     ):
         reasons.append("Detected JSON-like content")
-        if url.lower().split("?", 1)[0].endswith(".json"):
+        if _url_path_ends_with(url, (".json",)):
             reasons.append("URL path ends with .json")
         return ScrapeRoute(
             route="api_like_json",
@@ -185,6 +225,27 @@ def decide_scrape_route(
             reasons=reasons,
             signals=signals,
             recommended_next_step="Use a JSON/API parser when that extractor is available.",
+        )
+
+    if (
+        _url_path_ends_with(url, XML_URL_EXTENSIONS)
+        or "xml" in content_type
+        or "rss" in content_type
+        or "atom" in content_type
+        or meta_info["is_xml"]
+        or html_info["xml_like_content"]
+    ):
+        reasons.append("Detected XML-like content")
+        if _url_path_ends_with(url, XML_URL_EXTENSIONS):
+            reasons.append("URL path ends with .xml/.rss/.atom")
+        if meta_info["is_xml"]:
+            reasons.append("Source profiler detected XML content")
+        return ScrapeRoute(
+            route="api_like_xml",
+            confidence="green",
+            reasons=reasons,
+            signals=signals,
+            recommended_next_step="Use the XML extractor through the api_xml strategy when available.",
         )
 
     if html is None:
