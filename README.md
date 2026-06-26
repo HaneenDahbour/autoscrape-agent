@@ -111,6 +111,28 @@ Run the tests with:
 python -m pytest
 ```
 
+## V2 — API-like JSON Extraction
+
+V2 adds a JSON extractor for API-like endpoints. When a site exposes structured JSON, that path is preferred because it is usually cleaner, less brittle, and more respectful than parsing rendered HTML.
+
+Supported JSON shapes:
+
+* a top-level list of objects,
+* an object with `items`,
+* an object with `products`,
+* an object with `data`,
+* nested containers such as `{"data": {"items": [...]}}`.
+
+This fits the explainable routing layer directly: when the existing strategy selector chooses `api_json`, or the Step 3 router recommends `api_like_json`, the pipeline uses the JSON extractor. Static HTML extraction remains unchanged, and browser rendering is still only a recommendation route.
+
+The JSON extractor keeps requested fields when present, maps common URL-like fields such as `path`, `href`, or `link` into `url` when requested, stamps each record with `source = "api_like_json"`, and lets the existing cleaner resolve relative URLs. Invalid JSON, blocked status codes, and network failures are handled safely with warnings/decisions instead of crashing the pipeline.
+
+Run the tests with:
+
+```powershell
+python -m pytest
+```
+
 ## Safety Rules
 
 AutoScrape Agent V1 does not:

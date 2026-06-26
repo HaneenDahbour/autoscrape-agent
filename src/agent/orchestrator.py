@@ -63,13 +63,19 @@ def run_pipeline(ctx: JobContext) -> JobContext:
     })
 
     # ── 5. Extractor (only if job is still allowed) ──────────────────────────
-    if ctx.allowed and ctx.selected_strategy not in ("blocked", "unknown"):
-        extractor = get_extractor(ctx.selected_strategy)
+    route_name = ctx.scrape_route.get("route")
+    can_extract = ctx.selected_strategy not in ("blocked", "unknown") or route_name == "api_like_json"
+    if ctx.allowed and can_extract:
+        extractor_strategy = ctx.selected_strategy
+        if route_name == "api_like_json":
+            extractor_strategy = "api_like_json"
+
+        extractor = get_extractor(extractor_strategy)
         if extractor:
             ctx = extractor(ctx)
         else:
             ctx.warnings.append(
-                f"No extractor registered for strategy '{ctx.selected_strategy}'."
+                f"No extractor registered for strategy '{extractor_strategy}'."
             )
 
     # ── 6. Cleaner ───────────────────────────────────────────────────────────
