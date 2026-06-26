@@ -9,14 +9,14 @@ Purpose:
 Strategy options:
   blocked       — job not permitted to proceed
   api_json      — response is JSON (V2 implemented)
-  api_xml       — response is XML (V2 planned)
+  api_xml       — response is XML (V2.1 implemented)
   scrapy        — HTML with visible data and pagination (V3 planned)
   static_html   — HTML with visible data, no pagination (V1 IMPLEMENTED)
   selenium      — HTML but JavaScript-rendered content (V3 planned)
   manual_review — none of the above matched
 
-Static HTML and API-like JSON have real extractors. Other strategies log a
-clear decision and skip extraction with a note that they are planned for V2/V3.
+Static HTML, API-like JSON, and XML have real extractors. Other strategies log
+a clear decision and skip extraction with a note that they are planned for V3.
 """
 
 from src.models import JobContext
@@ -66,7 +66,7 @@ def run_strategy_selector(ctx: JobContext) -> JobContext:
         ctx.selected_strategy = "api_xml"
         ctx.strategy_reason = (
             "Response Content-Type is XML. "
-            "XML extractor is planned for V2; skipping extraction."
+            "XML extraction is available and should be used by the extractor registry."
         )
         ctx.decisions.append({
             "layer": "strategy_selector",

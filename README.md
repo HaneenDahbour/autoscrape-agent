@@ -133,6 +133,27 @@ Run the tests with:
 python -m pytest
 ```
 
+## V2.1 — XML Extraction
+
+XML still matters because many feeds, catalogs, government datasets, sitemaps, legacy APIs, and publishing systems expose structured data as XML instead of JSON. When XML is available, AutoScrape Agent can use it as a structured source rather than scraping rendered HTML.
+
+Supported XML shapes:
+
+* repeated `<item>` nodes,
+* repeated `<product>` nodes,
+* repeated `<entry>` nodes,
+* fallback repeated child nodes under the root when they look like records.
+
+This fits the existing strategy selector and extractor registry directly: when the source profiler marks a response as XML, the strategy selector chooses `api_xml`, and the extractor registry now maps `api_xml` to the XML extractor. JSON and static HTML behavior are unchanged.
+
+The XML extractor keeps requested simple child tags when present, stamps each item with `source = "api_xml"`, and lets the existing cleaner handle relative URLs. Invalid XML, blocked status codes, and network failures are handled safely with warnings/decisions instead of crashing the pipeline.
+
+Run the tests with:
+
+```powershell
+python -m pytest
+```
+
 ## Safety Rules
 
 AutoScrape Agent V1 does not:

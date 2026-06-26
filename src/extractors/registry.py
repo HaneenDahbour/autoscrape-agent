@@ -10,6 +10,7 @@ Adding a new extractor in V2/V3:
 from src.models import JobContext
 from src.extractors.static_html_extractor import run_static_html_extractor
 from src.extractors.json_extractor import run_json_extractor
+from src.extractors.xml_extractor import run_xml_extractor
 
 
 def _not_implemented_extractor(strategy_name: str, version_note: str):
@@ -37,11 +38,9 @@ EXTRACTOR_REGISTRY: dict = {
     "static_html": run_static_html_extractor,
     "api_json": run_json_extractor,
     "api_like_json": run_json_extractor,
+    "api_xml": run_xml_extractor,
 
     # ── Planned for V2 ───────────────────────────────────────────────────────
-    "api_xml": _not_implemented_extractor(
-        "api_xml", "XML extractor planned for V2."
-    ),
 
     # ── Planned for V3 ───────────────────────────────────────────────────────
     "scrapy": _not_implemented_extractor(
