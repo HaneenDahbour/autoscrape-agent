@@ -68,6 +68,8 @@ def main() -> None:
     print(f"  Allowed            : {ctx.allowed}")
     print(f"  Authorization      : {ctx.authorization_status}")
     print(f"  Strategy           : {ctx.selected_strategy}")
+    if ctx.scrape_route:
+        print(f"  Scrape route       : {ctx.scrape_route['route']} ({ctx.scrape_route['confidence']})")
     print(f"  Raw items          : {len(ctx.raw_items)}")
     print(f"  Valid items        : {len(ctx.valid_items)}")
     print(f"  Invalid items      : {len(ctx.invalid_items)}")
@@ -87,6 +89,9 @@ def main() -> None:
         print(f"\n  Output files:")
         for fmt, path in ctx.output_paths.items():
             print(f"    [{fmt}] {path}")
+
+    if ctx.route_explanation:
+        print(f"\n{ctx.route_explanation}")
 
     print("\n── Decisions audit trail ─────────────────────────────")
     for d in ctx.decisions:

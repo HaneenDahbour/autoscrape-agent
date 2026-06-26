@@ -23,6 +23,7 @@ from src.policy.risk_engine import run_risk_engine
 from src.policy.robots_checker import run_robots_checker
 from src.profiler.source_profiler import run_source_profiler
 from src.agent.strategy_selector import run_strategy_selector
+from src.routing import decide_scrape_route, format_route_explanation
 from src.extractors.registry import get_extractor
 from src.processing.cleaner import run_cleaner
 from src.processing.validator import run_validator
@@ -49,6 +50,17 @@ def run_pipeline(ctx: JobContext) -> JobContext:
 
     # ── 4. Strategy selector ─────────────────────────────────────────────────
     ctx = run_strategy_selector(ctx)
+
+    # Step 3. Explainable routing records the recommended scrape route without
+    # replacing the V1 strategy selector or extractor registry.
+    route = decide_scrape_route(ctx.url, metadata=ctx.source_profile)
+    ctx.scrape_route = route.to_dict()
+    ctx.route_explanation = format_route_explanation(route)
+    ctx.decisions.append({
+        "layer": "routing",
+        "decision": route.route,
+        "reason": "; ".join(route.reasons),
+    })
 
     # ── 5. Extractor (only if job is still allowed) ──────────────────────────
     if ctx.allowed and ctx.selected_strategy not in ("blocked", "unknown"):

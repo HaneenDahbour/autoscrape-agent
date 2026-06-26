@@ -86,6 +86,31 @@ Otherwise → manual_review
 
 In V1, only the `static_html` extractor is implemented. Other strategies are intentionally marked as planned future work.
 
+## Step 3 — Explainable Routing
+
+Step 3 adds an explainable routing layer before extraction. The router inspects the URL, optional HTML/content, and profiler metadata, then records a `ScrapeRoute` with:
+
+* the recommended route,
+* a green/yellow/red confidence label,
+* human-readable reasons,
+* the signals used for the decision,
+* and the recommended next step.
+
+Supported routes:
+
+* `static_html` - normal HTML appears sufficient for extraction.
+* `browser_render` - the page looks JavaScript-heavy or too empty for static parsing. This is currently a recommendation only; Playwright/Selenium is not forced.
+* `api_like_json` - the URL, content type, profiler metadata, or content looks JSON-like.
+* `fallback_manual_review` - blocked/captcha/access denied patterns or unclear signals require manual inspection.
+
+Explainability matters because scraping decisions should be auditable. Instead of silently choosing a tool, the pipeline now records why it selected a route, what evidence it used, and what should happen next.
+
+Run the tests with:
+
+```powershell
+python -m pytest
+```
+
 ## Safety Rules
 
 AutoScrape Agent V1 does not:

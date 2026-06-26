@@ -37,6 +37,8 @@ class JobContext:
     # "blocked", "api_json", "api_xml", "scrapy",
     # "static_html", "selenium", "manual_review", "unknown"
     strategy_reason: str = ""
+    scrape_route: dict[str, Any] = field(default_factory=dict)
+    route_explanation: str = ""
 
     # ── Extracted data ───────────────────────────────────────────────────────
     raw_items: list[dict[str, Any]] = field(default_factory=list)

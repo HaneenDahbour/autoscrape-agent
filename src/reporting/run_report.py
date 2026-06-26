@@ -43,6 +43,8 @@ def run_report_generator(ctx: JobContext) -> JobContext:
         # ── Strategy ──────────────────────────────────────────────────────
         "selected_strategy": ctx.selected_strategy,
         "strategy_reason": ctx.strategy_reason,
+        "scrape_route": ctx.scrape_route,
+        "route_explanation": ctx.route_explanation,
 
         # ── Extraction metrics ────────────────────────────────────────────
         "raw_items_count": len(ctx.raw_items),
