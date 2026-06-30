@@ -11,6 +11,7 @@ from src.models import JobContext
 from src.extractors.static_html_extractor import run_static_html_extractor
 from src.extractors.json_extractor import run_json_extractor
 from src.extractors.xml_extractor import run_xml_extractor
+from src.extractors.scrapy_extractor import run_scrapy_extractor
 
 
 def _not_implemented_extractor(strategy_name: str, version_note: str):
@@ -43,9 +44,7 @@ EXTRACTOR_REGISTRY: dict = {
     # ── Planned for V2 ───────────────────────────────────────────────────────
 
     # ── Planned for V3 ───────────────────────────────────────────────────────
-    "scrapy": _not_implemented_extractor(
-        "scrapy", "Multi-page Scrapy crawl planned for V3."
-    ),
+    "scrapy": run_scrapy_extractor,
     "selenium": _not_implemented_extractor(
         "selenium", "JavaScript-rendering via Selenium planned for V3."
     ),

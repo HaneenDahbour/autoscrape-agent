@@ -99,8 +99,10 @@ Step 3 adds an explainable routing layer before extraction. The router inspects 
 Supported routes:
 
 * `static_html` - normal HTML appears sufficient for extraction.
+* `scrapy_crawl` - visible static HTML has pagination and should be crawled with bounded same-domain pagination.
 * `browser_render` - the page looks JavaScript-heavy or too empty for static parsing. This is currently a recommendation only; Playwright/Selenium is not forced.
 * `api_like_json` - the URL, content type, profiler metadata, or content looks JSON-like.
+* `api_like_xml` - the URL, content type, profiler metadata, or content looks XML-like.
 * `fallback_manual_review` - blocked/captcha/access denied patterns or unclear signals require manual inspection.
 
 Explainability matters because scraping decisions should be auditable. Instead of silently choosing a tool, the pipeline now records why it selected a route, what evidence it used, and what should happen next.
@@ -110,6 +112,12 @@ Run the tests with:
 ```powershell
 python -m pytest
 ```
+
+## V3.1 - Scrapy Extractor
+
+V3.1 adds a bounded Scrapy extractor for paginated static HTML. It is selected only when visible HTML data and pagination are detected, follows same-domain pagination links only, and uses safety limits such as `max_pages = 5` and `max_items = 100`.
+
+Install dependencies with `pip install -r requirements.txt` or `pip install scrapy`. Selenium/browser rendering remains a future stage.
 
 ## V2 — API-like JSON Extraction
 
