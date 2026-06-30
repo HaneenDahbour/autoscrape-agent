@@ -9,7 +9,8 @@ Purpose:
 Detections:
   - Content type (HTML / JSON / XML)
   - JavaScript-heavy pages (many <script> tags, little visible text)
-  - Pagination signals (rel="next", .next link, .pagination)
+  - Pagination signals (rel="next", next-like text, page/offset/cursor hrefs,
+    and pagination/pager/next-page classes)
   - Field-aware data visibility: evidence is detected per requested field,
     not by a raw character count. This means even a minimal page like
     example.com correctly returns data_visible_in_html=True when "title"
@@ -55,6 +56,80 @@ _URL_FIELD_NAMES = {"url", "href", "link"}
 
 # Fields that map to the "title" evidence check
 _TITLE_FIELD_NAMES = {"title", "name", "heading"}
+
+_NEXT_TEXT_VALUES = {"next", ">", "\xbb", "التالي", "الصفحة التالية"}
+
+_PAGINATION_HREF_RE = re.compile(
+    r"([?&]page=\d+|[?&]page=|/page/\d+\b|[?&]offset=|[?&]cursor=)",
+    re.IGNORECASE,
+)
+
+_PAGINATION_CLASS_RE = re.compile(r"(pagination|pager|next-page)", re.IGNORECASE)
+
+
+def _rel_contains_next(value):
+    if value is None:
+        return False
+    if isinstance(value, (list, tuple, set)):
+        return any(str(part).lower() == "next" for part in value)
+    return str(value).lower() == "next"
+
+
+def _class_or_id_contains_pagination(tag):
+    if not hasattr(tag, "get"):
+        return False
+
+    values = []
+    class_value = tag.get("class")
+    if isinstance(class_value, (list, tuple, set)):
+        values.extend(str(part) for part in class_value)
+    elif class_value:
+        values.append(str(class_value))
+
+    id_value = tag.get("id")
+    if id_value:
+        values.append(str(id_value))
+
+    return any(_PAGINATION_CLASS_RE.search(value) for value in values)
+
+
+def _detect_pagination_signals(soup):
+    """
+    Detect common HTML pagination markers and count likely next-page links.
+
+    Returns:
+      has_pagination              - True when any signal is present
+      pagination_signals          - human-readable signal labels
+      next_page_candidates_count  - count of anchors that look like next-page links
+    """
+    signals = []
+    candidate_anchor_ids = set()
+
+    for anchor in soup.find_all("a", href=True):
+        href = anchor.get("href", "")
+        text = anchor.get_text(separator=" ", strip=True).lower()
+
+        if _rel_contains_next(anchor.get("rel")):
+            signals.append("a[rel=next]")
+            candidate_anchor_ids.add(id(anchor))
+
+        if text in _NEXT_TEXT_VALUES:
+            signals.append(f"next-like anchor text: {text}")
+            candidate_anchor_ids.add(id(anchor))
+
+        if _PAGINATION_HREF_RE.search(href):
+            signals.append("pagination href pattern")
+            candidate_anchor_ids.add(id(anchor))
+
+        if _class_or_id_contains_pagination(anchor):
+            signals.append("pagination class/id on anchor")
+            candidate_anchor_ids.add(id(anchor))
+
+    if soup.find(_class_or_id_contains_pagination):
+        signals.append("pagination class/id on element")
+
+    pagination_signals = list(dict.fromkeys(signals))
+    return bool(pagination_signals), pagination_signals, len(candidate_anchor_ids)
 
 
 def _detect_field_evidence(soup, fields, body_text):
@@ -120,7 +195,8 @@ def run_source_profiler(ctx):
     Profile keys:
       status_code, content_type, html_size,
       is_json, is_xml, is_html,
-      js_heavy, pagination_detected, data_visible_in_html,
+      js_heavy, has_pagination, pagination_detected, pagination_signals,
+      next_page_candidates_count, data_visible_in_html,
       visible_field_hits, link_count,
       title_candidates_count, price_candidates_count
     """
@@ -169,7 +245,11 @@ def run_source_profiler(ctx):
             "content_type": content_type,
             "html_size": html_size,
             "is_json": False, "is_xml": False, "is_html": False,
-            "js_heavy": False, "pagination_detected": False,
+            "js_heavy": False,
+            "has_pagination": False,
+            "pagination_detected": False,
+            "pagination_signals": [],
+            "next_page_candidates_count": 0,
             "data_visible_in_html": False,
             "visible_field_hits": [],
             "link_count": 0,
@@ -190,7 +270,9 @@ def run_source_profiler(ctx):
 
     # -- HTML analysis (only if HTML) ------------------------------------
     js_heavy = False
-    pagination_detected = False
+    has_pagination = False
+    pagination_signals = []
+    next_page_candidates_count = 0
     data_visible_in_html = False
     visible_field_hits = []
     link_count = 0
@@ -205,11 +287,11 @@ def run_source_profiler(ctx):
         script_count = len(soup.find_all("script"))
         js_heavy = script_count > JS_SCRIPT_THRESHOLD and len(body_text) < 200
 
-        # Pagination signals
-        has_rel_next = bool(soup.find("a", rel="next"))
-        has_class_next = bool(soup.find("a", class_="next"))
-        has_pagination_div = bool(soup.select(".pagination a"))
-        pagination_detected = has_rel_next or has_class_next or has_pagination_div
+        (
+            has_pagination,
+            pagination_signals,
+            next_page_candidates_count,
+        ) = _detect_pagination_signals(soup)
 
         # Field-aware evidence detection.
         # data_visible_in_html is True when at least one requested field
@@ -232,7 +314,10 @@ def run_source_profiler(ctx):
         "is_xml": is_xml,
         "is_html": is_html,
         "js_heavy": js_heavy,
-        "pagination_detected": pagination_detected,
+        "has_pagination": has_pagination,
+        "pagination_detected": has_pagination,
+        "pagination_signals": pagination_signals,
+        "next_page_candidates_count": next_page_candidates_count,
         "data_visible_in_html": data_visible_in_html,
         "visible_field_hits": visible_field_hits,
         "link_count": link_count,
@@ -244,7 +329,9 @@ def run_source_profiler(ctx):
     reason = (
         f"Profiled {ctx.url}: status={status_code}, "
         f"is_html={is_html}, is_json={is_json}, is_xml={is_xml}, "
-        f"js_heavy={js_heavy}, pagination={pagination_detected}, "
+        f"js_heavy={js_heavy}, pagination={has_pagination}, "
+        f"pagination_signals={pagination_signals}, "
+        f"next_page_candidates={next_page_candidates_count}, "
         f"data_visible={data_visible_in_html}, "
         f"field_hits={visible_field_hits}, links={link_count}."
     )

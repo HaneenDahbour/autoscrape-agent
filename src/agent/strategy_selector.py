@@ -79,11 +79,14 @@ def run_strategy_selector(ctx: JobContext) -> JobContext:
     if p.get("is_html"):
 
         # Paginated HTML with visible data → Scrapy (multi-page crawl)
-        if p.get("data_visible_in_html") and p.get("pagination_detected"):
+        if (
+            p.get("data_visible_in_html")
+            and (p.get("has_pagination") or p.get("pagination_detected"))
+        ):
             ctx.selected_strategy = "scrapy"
             ctx.strategy_reason = (
-                "HTML page has visible data and pagination links. "
-                "Multi-page Scrapy crawl is planned for V3; skipping extraction."
+                "HTML data is visible and pagination was detected, so Scrapy "
+                "crawling is recommended."
             )
             ctx.decisions.append({
                 "layer": "strategy_selector",

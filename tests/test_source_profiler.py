@@ -336,7 +336,9 @@ def test_new_profile_keys_present_on_success():
                return_value=mock_response(MINIMAL_HTML)):
         ctx = run_source_profiler(ctx)
     for key in ("visible_field_hits", "link_count",
-                "title_candidates_count", "price_candidates_count"):
+                "title_candidates_count", "price_candidates_count",
+                "has_pagination", "pagination_signals",
+                "next_page_candidates_count"):
         assert key in ctx.source_profile, f"Missing key: {key}"
 
 
@@ -346,7 +348,9 @@ def test_new_profile_keys_present_on_blocked_status():
                return_value=mock_response("", status=403)):
         ctx = run_source_profiler(ctx)
     for key in ("visible_field_hits", "link_count",
-                "title_candidates_count", "price_candidates_count"):
+                "title_candidates_count", "price_candidates_count",
+                "has_pagination", "pagination_signals",
+                "next_page_candidates_count"):
         assert key in ctx.source_profile, f"Missing key: {key}"
 
 
@@ -368,6 +372,35 @@ def test_pagination_detection_still_works():
                return_value=mock_response(PAGINATED_HTML)):
         ctx = run_source_profiler(ctx)
     assert ctx.source_profile["pagination_detected"] is True
+    assert ctx.source_profile["has_pagination"] is True
+    assert ctx.source_profile["pagination_signals"]
+    assert ctx.source_profile["next_page_candidates_count"] >= 1
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        '<html><body><a rel="next" href="/products?page=2">More</a></body></html>',
+        '<html><body><a href="/products?page=2">next</a></body></html>',
+        '<html><body><a href="/products?page=2">&gt;</a></body></html>',
+        '<html><body><a href="/products/page/2">\xbb</a></body></html>',
+        '<html><body><a href="/products?page=2">التالي</a></body></html>',
+        '<html><body><a href="/products?page=2">الصفحة التالية</a></body></html>',
+        '<html><body><a href="/products?offset=20">More</a></body></html>',
+        '<html><body><a href="/products?cursor=abc">More</a></body></html>',
+        '<html><body><nav class="pager"><a href="/products/2">More</a></nav></body></html>',
+        '<html><body><a class="next-page" href="/products/2">More</a></body></html>',
+    ],
+)
+def test_expanded_pagination_signals_are_detected(html):
+    ctx = make_ctx(["url"])
+    with patch("src.profiler.source_profiler.requests.get",
+               return_value=mock_response(html)):
+        ctx = run_source_profiler(ctx)
+
+    assert ctx.source_profile["has_pagination"] is True
+    assert ctx.source_profile["pagination_detected"] is True
+    assert ctx.source_profile["pagination_signals"]
 
 
 # ---------------------------------------------------------------------------

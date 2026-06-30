@@ -27,7 +27,8 @@ def make_ctx(allowed: bool = True, profile: dict = None) -> JobContext:
 def html_profile(**kwargs) -> dict:
     base = {
         "is_html": True, "is_json": False, "is_xml": False,
-        "js_heavy": False, "pagination_detected": False, "data_visible_in_html": True,
+        "js_heavy": False, "has_pagination": False,
+        "pagination_detected": False, "data_visible_in_html": True,
     }
     base.update(kwargs)
     return base
@@ -80,6 +81,17 @@ def test_static_html_decision_appended():
 # ── Scrapy ────────────────────────────────────────────────────────────────────
 
 def test_chooses_scrapy_when_paginated():
+    ctx = run_strategy_selector(
+        make_ctx(profile=html_profile(has_pagination=True))
+    )
+    assert ctx.selected_strategy == "scrapy"
+    assert (
+        ctx.strategy_reason
+        == "HTML data is visible and pagination was detected, so Scrapy crawling is recommended."
+    )
+
+
+def test_chooses_scrapy_with_legacy_pagination_detected_key():
     ctx = run_strategy_selector(
         make_ctx(profile=html_profile(pagination_detected=True))
     )

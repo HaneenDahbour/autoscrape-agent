@@ -20,6 +20,19 @@ NORMAL_HTML = """
 </html>
 """
 
+PAGINATED_HTML = """
+<html>
+  <head><title>Catalog</title></head>
+  <body>
+    <article class="product-card">
+      <a href="/products/widget">Widget Pro</a>
+      <p>Price: $29.99. In stock today.</p>
+    </article>
+    <nav class="pagination"><a rel="next" href="/products?page=2">Next</a></nav>
+  </body>
+</html>
+"""
+
 SCRIPT_HEAVY_HTML = (
     "<html><head>"
     + "<script>window.__DATA__ = {};</script>" * 8
@@ -100,6 +113,27 @@ def test_normal_html_routes_to_static_html():
 
     assert route.route == "static_html"
     assert "Static HTML appears sufficient" in route.reasons
+
+
+def test_paginated_html_routes_to_scrapy_crawl():
+    route = decide_scrape_route("https://example.com/products", html=PAGINATED_HTML)
+
+    assert route.route == "scrapy_crawl"
+    assert "Pagination was detected, so this is a crawl case" in route.reasons
+
+
+def test_paginated_html_metadata_routes_to_scrapy_crawl():
+    route = decide_scrape_route(
+        "https://example.com/products",
+        metadata={
+            "is_html": True,
+            "data_visible_in_html": True,
+            "has_pagination": True,
+        },
+    )
+
+    assert route.route == "scrapy_crawl"
+    assert "Profiler detected pagination, so this is a crawl case" in route.reasons
 
 
 def test_script_heavy_low_text_html_routes_to_browser_render():

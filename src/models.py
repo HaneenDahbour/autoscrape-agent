@@ -30,7 +30,9 @@ class JobContext:
     # Keys set by source_profiler:
     #   status_code, content_type, html_size,
     #   is_json, is_xml, is_html,
-    #   js_heavy, pagination_detected, data_visible_in_html
+    #   js_heavy, has_pagination, pagination_detected,
+    #   pagination_signals, next_page_candidates_count,
+    #   data_visible_in_html
 
     # ── Strategy ─────────────────────────────────────────────────────────────
     selected_strategy: str = "unknown"

@@ -21,6 +21,7 @@ from bs4 import BeautifulSoup
 Confidence = Literal["green", "yellow", "red"]
 RouteName = Literal[
     "static_html",
+    "scrapy_crawl",
     "browser_render",
     "api_like_json",
     "api_like_xml",
@@ -45,6 +46,12 @@ BLOCKED_PATTERNS = (
 
 XML_URL_EXTENSIONS = (".xml", ".rss", ".atom")
 XML_START_PATTERNS = ("<?xml", "<rss", "<feed", "<items", "<products", "<entries")
+NEXT_TEXT_VALUES = {"next", ">", "\xbb", "التالي", "الصفحة التالية"}
+PAGINATION_HREF_RE = re.compile(
+    r"([?&]page=\d+|[?&]page=|/page/\d+\b|[?&]offset=|[?&]cursor=)",
+    re.IGNORECASE,
+)
+PAGINATION_CLASS_RE = re.compile(r"(pagination|pager|next-page)", re.IGNORECASE)
 
 
 @dataclass
@@ -90,6 +97,63 @@ def _url_path_ends_with(url: str, extensions: tuple[str, ...]) -> bool:
     return urlparse(url).path.lower().endswith(extensions)
 
 
+def _rel_contains_next(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, (list, tuple, set)):
+        return any(str(part).lower() == "next" for part in value)
+    return str(value).lower() == "next"
+
+
+def _class_or_id_contains_pagination(tag: Any) -> bool:
+    if not hasattr(tag, "get"):
+        return False
+
+    values: list[str] = []
+    class_value = tag.get("class")
+    if isinstance(class_value, (list, tuple, set)):
+        values.extend(str(part) for part in class_value)
+    elif class_value:
+        values.append(str(class_value))
+
+    id_value = tag.get("id")
+    if id_value:
+        values.append(str(id_value))
+
+    return any(PAGINATION_CLASS_RE.search(value) for value in values)
+
+
+def _detect_html_pagination(soup: BeautifulSoup) -> tuple[bool, list[str], int]:
+    signals: list[str] = []
+    candidate_anchor_ids = set()
+
+    for anchor in soup.find_all("a", href=True):
+        href = anchor.get("href", "")
+        text = anchor.get_text(separator=" ", strip=True).lower()
+
+        if _rel_contains_next(anchor.get("rel")):
+            signals.append("a[rel=next]")
+            candidate_anchor_ids.add(id(anchor))
+
+        if text in NEXT_TEXT_VALUES:
+            signals.append(f"next-like anchor text: {text}")
+            candidate_anchor_ids.add(id(anchor))
+
+        if PAGINATION_HREF_RE.search(href):
+            signals.append("pagination href pattern")
+            candidate_anchor_ids.add(id(anchor))
+
+        if _class_or_id_contains_pagination(anchor):
+            signals.append("pagination class/id on anchor")
+            candidate_anchor_ids.add(id(anchor))
+
+    if soup.find(_class_or_id_contains_pagination):
+        signals.append("pagination class/id on element")
+
+    pagination_signals = list(dict.fromkeys(signals))
+    return bool(pagination_signals), pagination_signals, len(candidate_anchor_ids)
+
+
 def _html_signals(html: str | None) -> dict[str, Any]:
     if html is None:
         return {
@@ -101,6 +165,9 @@ def _html_signals(html: str | None) -> dict[str, Any]:
             "blocked_pattern": None,
             "json_like_content": False,
             "xml_like_content": False,
+            "html_has_pagination": False,
+            "html_pagination_signals": [],
+            "html_next_page_candidates_count": 0,
         }
 
     lowered = html.lower()
@@ -119,6 +186,9 @@ def _html_signals(html: str | None) -> dict[str, Any]:
             "blocked_pattern": blocked_pattern,
             "json_like_content": True,
             "xml_like_content": False,
+            "html_has_pagination": False,
+            "html_pagination_signals": [],
+            "html_next_page_candidates_count": 0,
         }
 
     if _looks_like_xml(html):
@@ -131,9 +201,13 @@ def _html_signals(html: str | None) -> dict[str, Any]:
             "blocked_pattern": blocked_pattern,
             "json_like_content": False,
             "xml_like_content": True,
+            "html_has_pagination": False,
+            "html_pagination_signals": [],
+            "html_next_page_candidates_count": 0,
         }
 
     soup = BeautifulSoup(html, "lxml")
+    has_pagination, pagination_signals, next_page_candidates_count = _detect_html_pagination(soup)
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
 
@@ -153,6 +227,9 @@ def _html_signals(html: str | None) -> dict[str, Any]:
         "blocked_pattern": blocked_pattern,
         "json_like_content": False,
         "xml_like_content": False,
+        "html_has_pagination": has_pagination,
+        "html_pagination_signals": pagination_signals,
+        "html_next_page_candidates_count": next_page_candidates_count,
     }
 
 
@@ -166,6 +243,9 @@ def _metadata_signals(metadata: dict | None) -> dict[str, Any]:
         "is_html": bool(metadata.get("is_html")),
         "js_heavy": bool(metadata.get("js_heavy")),
         "data_visible_in_html": bool(metadata.get("data_visible_in_html")),
+        "has_pagination": bool(metadata.get("has_pagination") or metadata.get("pagination_detected")),
+        "pagination_signals": metadata.get("pagination_signals", []),
+        "next_page_candidates_count": metadata.get("next_page_candidates_count", 0),
         "visible_field_hits": metadata.get("visible_field_hits", []),
         "metadata_error": metadata.get("error"),
     }
@@ -259,6 +339,16 @@ def decide_scrape_route(
                 signals=signals,
                 recommended_next_step="Recommend browser rendering, but keep V1 extraction unchanged until a browser extractor is installed.",
             )
+        if meta_info["data_visible_in_html"] and meta_info["has_pagination"]:
+            reasons.append("Profiler found visible target-like data in HTML")
+            reasons.append("Profiler detected pagination, so this is a crawl case")
+            return ScrapeRoute(
+                route="scrapy_crawl",
+                confidence="yellow",
+                reasons=reasons,
+                signals=signals,
+                recommended_next_step="Recommend Scrapy crawling for paginated HTML; keep extraction skipped until the V3 Scrapy extractor is installed.",
+            )
         if meta_info["data_visible_in_html"]:
             reasons.append("Profiler found visible target-like data in HTML")
             return ScrapeRoute(
@@ -305,6 +395,18 @@ def decide_scrape_route(
         or html_info["target_like_structure_count"] > 0
         or meta_info["data_visible_in_html"]
     ):
+        has_pagination = html_info["html_has_pagination"] or meta_info["has_pagination"]
+        if has_pagination:
+            reasons.append("Static HTML contains visible target-like data")
+            reasons.append("Pagination was detected, so this is a crawl case")
+            return ScrapeRoute(
+                route="scrapy_crawl",
+                confidence="green",
+                reasons=reasons,
+                signals=signals,
+                recommended_next_step="Recommend Scrapy crawling for paginated HTML; keep extraction skipped until the V3 Scrapy extractor is installed.",
+            )
+
         reasons.append("Static HTML appears sufficient")
         if html_info["target_like_structure_count"] > 0:
             reasons.append("HTML contains target-like structure")
