@@ -46,6 +46,10 @@ BLOCKED_PATTERNS = (
 
 XML_URL_EXTENSIONS = (".xml", ".rss", ".atom")
 XML_START_PATTERNS = ("<?xml", "<rss", "<feed", "<items", "<products", "<entries")
+SCRAPY_CRAWL_NEXT_STEP = (
+    "Use bounded Scrapy crawling for paginated static HTML. Review crawl limits, "
+    "extracted records, and the audit report before scaling beyond the local demo."
+)
 NEXT_TEXT_VALUES = {"next", ">", "\xbb", "التالي", "الصفحة التالية"}
 PAGINATION_HREF_RE = re.compile(
     r"([?&]page=\d+|[?&]page=|/page/\d+\b|[?&]offset=|[?&]cursor=)",
@@ -347,7 +351,7 @@ def decide_scrape_route(
                 confidence="yellow",
                 reasons=reasons,
                 signals=signals,
-                recommended_next_step="Recommend Scrapy crawling for paginated HTML; keep extraction skipped until the V3 Scrapy extractor is installed.",
+                recommended_next_step=SCRAPY_CRAWL_NEXT_STEP,
             )
         if meta_info["data_visible_in_html"]:
             reasons.append("Profiler found visible target-like data in HTML")
@@ -404,7 +408,7 @@ def decide_scrape_route(
                 confidence="green",
                 reasons=reasons,
                 signals=signals,
-                recommended_next_step="Recommend Scrapy crawling for paginated HTML; keep extraction skipped until the V3 Scrapy extractor is installed.",
+                recommended_next_step=SCRAPY_CRAWL_NEXT_STEP,
             )
 
         reasons.append("Static HTML appears sufficient")

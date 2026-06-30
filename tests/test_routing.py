@@ -7,6 +7,12 @@ import pytest
 from src.routing import decide_scrape_route, format_route_explanation
 
 
+SCRAPY_CRAWL_NEXT_STEP = (
+    "Use bounded Scrapy crawling for paginated static HTML. Review crawl limits, "
+    "extracted records, and the audit report before scaling beyond the local demo."
+)
+
+
 NORMAL_HTML = """
 <html>
   <head><title>Catalog</title></head>
@@ -120,6 +126,7 @@ def test_paginated_html_routes_to_scrapy_crawl():
 
     assert route.route == "scrapy_crawl"
     assert "Pagination was detected, so this is a crawl case" in route.reasons
+    assert route.recommended_next_step == SCRAPY_CRAWL_NEXT_STEP
 
 
 def test_paginated_html_metadata_routes_to_scrapy_crawl():
@@ -134,6 +141,7 @@ def test_paginated_html_metadata_routes_to_scrapy_crawl():
 
     assert route.route == "scrapy_crawl"
     assert "Profiler detected pagination, so this is a crawl case" in route.reasons
+    assert route.recommended_next_step == SCRAPY_CRAWL_NEXT_STEP
 
 
 def test_script_heavy_low_text_html_routes_to_browser_render():

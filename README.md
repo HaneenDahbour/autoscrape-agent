@@ -70,6 +70,74 @@ Storage
 Run Report
 ```
 
+## How the Agent Decides
+
+AutoScrape Agent is not a magic AI scraper. It is an evidence-based routing pipeline that inspects the request and source before choosing an extraction method.
+
+```text
+URL + requested fields
+→ Risk Engine
+→ Robots Checker
+→ Source Profiler
+→ Strategy Selector
+→ Explainable Router
+→ Extractor Registry
+→ Extractor
+→ Cleaner
+→ Validator
+→ Deduplicator
+→ Storage
+→ Run Report
+```
+
+* Risk Engine checks requested fields and blocks sensitive fields before scraping.
+* Robots Checker checks `robots.txt` as a permission signal.
+* Source Profiler sends a safe request and inspects status code, content type, HTML/JSON/XML signals, JavaScript heaviness, visible data, and pagination.
+* Strategy Selector chooses the simplest safe extraction method.
+* Explainable Router records why the route was chosen.
+* Extractor Registry maps the selected strategy to the correct extractor.
+* Extractors collect raw data.
+* Cleaner normalizes messy text, prices, and URLs.
+* Validator rejects incomplete or invalid records.
+* Deduplicator removes repeated records.
+* Storage saves valid records to CSV/SQLite.
+* Run Report writes an audit trail explaining every decision.
+
+## Strategy Selection Logic
+
+| Source signal | Selected strategy | Why |
+|---|---|---|
+| JSON response | api_json | Data is already structured |
+| XML/RSS/feed response | api_xml | Tag-based structured data |
+| Static HTML with visible data and no pagination | static_html | Simple one-page extraction |
+| Static HTML with visible data and pagination | scrapy | Needs crawling across multiple pages |
+| JavaScript-heavy page with low visible HTML data | selenium/browser_render future route | Needs browser rendering |
+| 401, 403, 429, CAPTCHA, login, sensitive fields | blocked/manual_review | Safety first |
+
+## Failure Handling and Safe Fallbacks
+
+The agent does not blindly scrape. When a weakness appears, it detects signals and chooses a safe action.
+
+| Weakness | Signal | Action |
+|---|---|---|
+| Data not visible in HTML | low visible text, many scripts | route to browser rendering/manual review |
+| Pagination exists | next links, rel=next, page parameters | route to Scrapy |
+| Site blocks request | 401, 403, 429, CAPTCHA | stop/manual review |
+| JSON schema unknown | valid JSON but no records found | warning/manual review |
+| XML malformed | parser error | warning/manual review |
+| Too many pages | crawl limit reached | stop at max_pages/max_items |
+| Duplicate records | same URL repeated | deduplicate |
+| Invalid records | missing title/url/bad price | reject before storage |
+| Scrapy missing | dependency not installed | safe warning, no crash |
+
+## Scraping Tools: When to Use What
+
+BeautifulSoup is used for simple static HTML pages where data already exists in raw HTML. The JSON extractor is used when the source returns structured JSON/API-like data. The XML extractor is used for RSS, Atom, sitemap-like, product feed, or older API data. Scrapy is used for paginated static HTML crawling. Selenium/browser rendering is future work and should only be used when JavaScript rendering is required.
+
+## Interview Explanation
+
+AutoScrape Agent is an ethical, explainable Python data extraction pipeline. The user provides a URL, requested fields, and output formats. Before scraping, the system checks risk and permission signals, profiles the source, chooses the simplest safe strategy, runs the matching extractor, cleans and validates the records, removes duplicates, stores valid data, and writes an audit report explaining every decision. The system supports static HTML, JSON, XML, and bounded Scrapy crawling for paginated HTML. It does not bypass CAPTCHA, login walls, rate limits, or access controls.
+
 ## V1 Strategy Selector
 
 The strategy selector chooses the extraction approach using deterministic rules:
